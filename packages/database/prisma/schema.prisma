@@ -1,0 +1,532 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  NURTURE
+  OPPORTUNITY
+  CUSTOMER
+  DISQUALIFIED
+}
+
+enum LeadPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum LeadSource {
+  MANUAL
+  IMPORT
+  WEBSITE
+  PARTNER
+  EVENT
+  INTENT_DATA
+  ENRICHED
+  REFERRAL
+  OUTBOUND
+}
+
+enum AgentType {
+  ORCHESTRATOR
+  DISCOVERY
+  QUALIFICATION
+  OUTREACH
+  FOLLOW_UP
+}
+
+enum AgentRunStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum ChannelType {
+  EMAIL
+  LINKEDIN
+  PHONE
+  SMS
+  WHATSAPP
+  SLACK
+  CALENDAR
+  MEETING
+}
+
+enum InteractionDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum SequenceStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum SequenceEnrollmentStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  PAUSED
+  CANCELLED
+  FAILED
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum TaskType {
+  FOLLOW_UP
+  CALL
+  SEND_RESOURCE
+  SCHEDULE_MEETING
+  CUSTOM
+}
+
+enum IntegrationProvider {
+  SALESFORCE
+  HUBSPOT
+  PIPEDRIVE
+  SENDGRID
+  CLEARBIT
+  ZOOMINFO
+  APOLLO
+  SLACK
+  TWILIO
+  HYPERBROWSER
+}
+
+enum WorkspacePlan {
+  STARTER
+  GROWTH
+  PROFESSIONAL
+  ENTERPRISE
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum WebhookEvent {
+  LEAD_CREATED
+  LEAD_UPDATED
+  LEAD_QUALIFIED
+  SEQUENCE_ENROLLED
+  SEQUENCE_COMPLETED
+  TASK_ASSIGNED
+  TASK_COMPLETED
+  AGENT_RUN_FAILED
+}
+
+model Workspace {
+  id        String         @id @default(cuid())
+  name      String
+  slug      String         @unique
+  plan      WorkspacePlan  @default(STARTER)
+  timezone  String?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  companies              Company[]
+  leads                  Lead[]
+  sequences              OutreachSequence[]
+  users                  WorkspaceUser[]
+  integrationCredentials IntegrationCredential[]
+  followUpTasks          FollowUpTask[]
+  agentRuns              AgentRun[]
+  timelineEvents         TimelineEvent[]
+  intentSignals          IntentSignal[]
+  analyticsSnapshots     LeadAnalytics[]
+  webhookSubscriptions   WebhookSubscription[]
+
+  @@index([plan])
+}
+
+model WorkspaceUser {
+  id          String        @id @default(cuid())
+  workspaceId String
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String
+  email       String
+  name        String?
+  role        WorkspaceRole @default(MEMBER)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@unique([workspaceId, userId])
+  @@unique([workspaceId, email])
+  @@index([role])
+}
+
+model Company {
+  id          String              @id @default(cuid())
+  workspaceId String
+  workspace   Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String
+  domain      String?             @unique
+  website     String?
+  industry    String?
+  employees   Int?
+  revenue     Decimal?            @db.Decimal(18, 2)
+  timezone    String?
+  linkedinUrl String?
+  country     String?
+  state       String?
+  city        String?
+  tags        String[]
+  enrichedAt  DateTime?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  leads        Lead[]
+  enrichments  CompanyEnrichment[]
+  integrations IntegrationCredential[]
+
+  @@index([workspaceId, name])
+  @@index([workspaceId, industry])
+}
+
+model CompanyEnrichment {
+  id         String   @id @default(cuid())
+  companyId  String
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  provider   String
+  payload    Json
+  receivedAt DateTime @default(now())
+
+  @@index([provider])
+  @@index([companyId, provider])
+}
+
+model Lead {
+  id                String            @id @default(cuid())
+  workspaceId       String
+  workspace         Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  companyId         String?
+  company           Company?          @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  firstName         String
+  lastName          String
+  email             String            @unique
+  phone             String?
+  title             String?
+  linkedinUrl       String?
+  timezone          String?
+  country           String?
+  state             String?
+  city              String?
+  status            LeadStatus        @default(NEW)
+  priority          LeadPriority      @default(MEDIUM)
+  source            LeadSource        @default(MANUAL)
+  score             Int               @default(0)
+  intentScore       Int?
+  fitScore          Int?
+  priorityScore     Int?
+  ownerUserId       String?
+  ownerName         String?
+  crmId             String?
+  lifecycleStage    String?
+  lastContactAt     DateTime?
+  nextActionAt      DateTime?
+  lastQualifiedAt   DateTime?
+  enrichedAt        DateTime?
+  enrichmentVersion Int               @default(0)
+  metadata          Json?
+  tags              String[]
+  archived          Boolean           @default(false)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  interactions          Interaction[]
+  qualificationSnapshots QualificationSnapshot[]
+  agentRuns             AgentRun[]
+  sequenceEnrollments   SequenceEnrollment[]
+  followUpTasks         FollowUpTask[]
+  intentSignals         IntentSignal[]
+  timelineEvents        TimelineEvent[]
+  analyticsSnapshots    LeadAnalytics[]
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, priority])
+  @@index([workspaceId, ownerUserId])
+  @@index([workspaceId, lifecycleStage])
+}
+
+model QualificationSnapshot {
+  id                 String       @id @default(cuid())
+  leadId             String
+  lead               Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  framework          String
+  qualificationScore Int
+  recommendation     String
+  metrics            Json?
+  economicBuyer      Json?
+  decisionCriteria   Json?
+  decisionProcess    Json?
+  painPoints         Json?
+  champion           Json?
+  notes              String?
+  createdAt          DateTime     @default(now())
+  createdByAgentId   String?
+
+  @@index([framework])
+  @@index([leadId, createdAt])
+}
+
+model AgentRun {
+  id                   String           @id @default(cuid())
+  workspaceId          String
+  workspace            Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  leadId               String?
+  lead                 Lead?            @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  sequenceEnrollmentId String?
+  sequenceEnrollment   SequenceEnrollment? @relation(fields: [sequenceEnrollmentId], references: [id], onDelete: SetNull)
+  agentType            AgentType
+  status               AgentRunStatus   @default(PENDING)
+  input                Json?
+  output               Json?
+  error                Json?
+  costUsd              Decimal?         @db.Decimal(18, 6)
+  latencyMs            Int?
+  startedAt            DateTime?
+  completedAt          DateTime?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  followUpTasks FollowUpTask[]
+  sequenceEvents SequenceEvent[]
+
+  @@index([workspaceId, agentType])
+  @@index([workspaceId, status])
+  @@index([leadId])
+  @@index([sequenceEnrollmentId])
+}
+
+model Interaction {
+  id          String               @id @default(cuid())
+  leadId      String
+  lead        Lead                 @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  channel     ChannelType
+  direction   InteractionDirection
+  subject     String?
+  content     String
+  payload     Json?
+  status      String?
+  sentAt      DateTime
+  respondedAt DateTime?
+  metadata    Json?
+  createdAt   DateTime             @default(now())
+
+  @@index([leadId, channel])
+  @@index([leadId, sentAt])
+}
+
+model OutreachSequence {
+  id          String          @id @default(cuid())
+  workspaceId String
+  workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  status      SequenceStatus  @default(DRAFT)
+  ownerUserId String?
+  tags        String[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  steps       SequenceStep[]
+  enrollments SequenceEnrollment[]
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, ownerUserId])
+  @@unique([workspaceId, name])
+}
+
+model SequenceStep {
+  id             String         @id @default(cuid())
+  sequenceId     String
+  sequence       OutreachSequence @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  order          Int
+  channel        ChannelType
+  waitHours      Int            @default(48)
+  aiPrompt       String
+  template       String?
+  fallbackTemplate String?
+  sendWindowStart Int?
+  sendWindowEnd   Int?
+  metadata       Json?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  events         SequenceEvent[]
+
+  @@index([sequenceId, order])
+  @@unique([sequenceId, order])
+}
+
+model SequenceEnrollment {
+  id            String                     @id @default(cuid())
+  leadId        String
+  lead          Lead                       @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  sequenceId    String
+  sequence      OutreachSequence           @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  status        SequenceEnrollmentStatus   @default(SCHEDULED)
+  startedAt     DateTime?
+  completedAt   DateTime?
+  cancelledAt   DateTime?
+  stopReason    String?
+  metadata      Json?
+  createdAt     DateTime                   @default(now())
+  updatedAt     DateTime                   @updatedAt
+
+  events        SequenceEvent[]
+  agentRuns     AgentRun[]
+
+  @@index([leadId, status])
+  @@index([sequenceId, status])
+  @@unique([leadId, sequenceId])
+}
+
+model SequenceEvent {
+  id                   String       @id @default(cuid())
+  sequenceEnrollmentId String
+  sequenceEnrollment   SequenceEnrollment @relation(fields: [sequenceEnrollmentId], references: [id], onDelete: Cascade)
+  stepId               String?
+  step                 SequenceStep?      @relation(fields: [stepId], references: [id], onDelete: SetNull)
+  agentRunId           String?
+  agentRun             AgentRun?          @relation(fields: [agentRunId], references: [id], onDelete: SetNull)
+  eventType            String
+  payload              Json?
+  occurredAt           DateTime     @default(now())
+
+  @@index([sequenceEnrollmentId, occurredAt])
+}
+
+model FollowUpTask {
+  id             String      @id @default(cuid())
+  workspaceId    String
+  workspace      Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  leadId         String
+  lead           Lead        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  agentRunId     String?
+  agentRun       AgentRun?   @relation(fields: [agentRunId], references: [id], onDelete: SetNull)
+  type           TaskType
+  status         TaskStatus  @default(PENDING)
+  dueAt          DateTime?
+  completedAt    DateTime?
+  assignedToUserId String?
+  notes          String?
+  metadata       Json?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@index([workspaceId, status])
+  @@index([leadId, status])
+  @@index([assignedToUserId])
+}
+
+model IntentSignal {
+  id           String     @id @default(cuid())
+  workspaceId  String
+  workspace    Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  leadId       String
+  lead         Lead       @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  provider     String
+  topic        String?
+  score        Int
+  weight       Int?       @default(1)
+  payload      Json?
+  capturedAt   DateTime   @default(now())
+
+  @@index([workspaceId, provider])
+  @@index([leadId, capturedAt])
+}
+
+model TimelineEvent {
+  id           String    @id @default(cuid())
+  workspaceId  String
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  leadId       String
+  lead         Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  eventType    String
+  actorType    String
+  actorId      String?
+  summary      String
+  data         Json?
+  occurredAt   DateTime
+  createdAt    DateTime  @default(now())
+
+  @@index([workspaceId, occurredAt])
+  @@index([leadId, occurredAt])
+}
+
+model LeadAnalytics {
+  id                    String    @id @default(cuid())
+  workspaceId           String
+  workspace             Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  leadId                String
+  lead                  Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  metricDate            DateTime
+  newLeads              Int       @default(0)
+  qualifiedLeads        Int       @default(0)
+  respondedLeads        Int       @default(0)
+  responseTimeMinutes   Int?
+  touches               Int?
+  sentimentScore        Float?
+  conversionProbability Float?
+  pipelineStage         String?
+  createdAt             DateTime  @default(now())
+
+  @@unique([leadId, metricDate])
+  @@index([workspaceId, metricDate])
+}
+
+model IntegrationCredential {
+  id                String               @id @default(cuid())
+  workspaceId       String
+  workspace         Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  companyId         String?
+  company           Company?             @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  provider          IntegrationProvider
+  externalAccountId String?
+  accessToken       String?
+  refreshToken      String?
+  scopes            String[]
+  expiresAt         DateTime?
+  metadata          Json?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  @@unique([workspaceId, provider, externalAccountId])
+  @@index([provider])
+}
+
+model WebhookSubscription {
+  id        String       @id @default(cuid())
+  workspaceId String
+  workspace Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  event     WebhookEvent
+  targetUrl String
+  secret    String
+  isActive  Boolean      @default(true)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([workspaceId, event])
+}

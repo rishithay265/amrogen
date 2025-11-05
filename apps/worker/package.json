@@ -1,0 +1,22 @@
+{
+  "name": "worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "NODE_ENV=production node dist/index.js",
+    "build": "tsup src/index.ts --format esm,cjs --dts --clean"
+  },
+  "dependencies": {
+    "@amrogen/database": "workspace:*",
+    "@amrogen/platform": "workspace:*",
+    "dotenv": "16.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.24",
+    "tsup": "8.3.5",
+    "tsx": "4.16.2",
+    "typescript": "5.9.3"
+  }
+}
